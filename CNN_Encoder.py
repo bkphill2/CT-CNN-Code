@@ -1,39 +1,73 @@
 import tensorflow as tf
-from tensorflow.keras import datasets, layers, models
+from tensorflow.keras import layers, models
 import matplotlib.pyplot as plt
-import argparse
 from PIL import Image
 import numpy as np
+import os
+import shutil
 
+# Function to clear the contents of a directory
+def clear_directory(directory):
+    if os.path.exists(directory):
+        for filename in os.listdir(directory):
+            file_path = os.path.join(directory, filename)
+            if os.path.isfile(file_path) or os.path.islink(file_path):
+                os.unlink(file_path)
+            elif os.path.isdir(file_path):
+                shutil.rmtree(file_path)
 
-parser = argparse.ArgumentParser(description='')
-parser.add_argument('--in', dest='infile', default='.', help='input file -- directory or single file')
-parser.add_argument('--out', dest='outfile', default='.', help='output directory')
+# Path to the directory with images
+data_dir = '/data/bkphill2/images'
 
-args = parser.parse_args()
-infile, outfile = args.infile, args.outfile
+# Directories to save the images
+output_dir_original = 'output/original_images'
+output_dir_reconstructed = 'output/reconstructed_images'
 
+# Create directories if they do not exist
+os.makedirs(output_dir_original, exist_ok=True)
+os.makedirs(output_dir_reconstructed, exist_ok=True)
 
-if args.sup_params is None:
-    use_sup = False
-else:
-    use_sup = True
+# Load the training dataset (80% of the data)
+train_dataset = tf.keras.preprocessing.image_dataset_from_directory(
+    data_dir,
+    labels='inferred',
+    label_mode='int',
+    color_mode='rgb',
+    batch_size=32,
+    image_size=(512, 512),
+    shuffle=True,
+    seed=123,
+    validation_split=0.2,  # 20% of data for validation
+    subset="training",     # Use this subset for training
+    interpolation='bilinear'
+)
 
-eps = np.finfo(float).eps
+# Load the validation dataset (20% of the data)
+validation_dataset = tf.keras.preprocessing.image_dataset_from_directory(
+    data_dir,
+    labels='inferred',
+    label_mode='int',
+    color_mode='rgb',
+    batch_size=32,
+    image_size=(512, 512),
+    shuffle=True,
+    seed=123,
+    validation_split=0.2,  # 20% of data for validation
+    subset="validation",   # Use this subset for validation
+    interpolation='bilinear'
+)
 
-if os.path.isdir(infile):               #generate list of filenames from directory
-    fnames = sorted(glob(infile + '/*.flt'))
-else:                                                   #single filename
-    fnames = []
-    fnames.append(infile)
+# Normalize pixel values to be between 0 and 1 using a lambda function
+normalized_train_dataset = train_dataset.map(lambda x, y: (x / 255.0, x / 255.0))
+normalized_validation_dataset = validation_dataset.map(lambda x, y: (x / 255.0, x / 255.0))
 
 # Define the encoder
 encoder = models.Sequential([
-    layers.Input(shape=(32, 32, 3)),
-    layers.Conv2D(32, (3, 3), activation='relu', padding='same'),
-    layers.MaxPooling2D((2, 2), padding='same'),
+    layers.Input(shape=(512, 512, 3)),
     layers.Conv2D(64, (3, 3), activation='relu', padding='same'),
-    layers.MaxPooling2D((2, 2), padding='same')
+    layers.MaxPooling2D((2, 2)),
+    layers.Conv2D(64, (3, 3), activation='relu', padding='same'),
+    layers.MaxPooling2D((2, 2))
 ])
 
 # Define the decoder
@@ -45,28 +79,39 @@ decoder = models.Sequential([
     layers.Conv2D(3, (3, 3), activation='sigmoid', padding='same')
 ])
 
+# Combine encoder and decoder to create the autoencoder
 autoencoder = models.Sequential([encoder, decoder])
 
-autoencoder.compile(optimizer = 'adam', loss = 'mean_squared_error')
-autoencoder.fit(train_images, train_images, epochs=10, batch_size=128, shuffle=True, validation_data=(test_images, test_images))
+# Compile the autoencoder
+autoencoder.compile(optimizer='adam', loss='mean_squared_error')
 
-#save image (SART code)
- #save image
-    f = np.float32(f)
-    f.tofile(outname)
+# Train the autoencoder
+autoencoder.fit(
+    normalized_train_dataset,
+    epochs=10,
+    validation_data=normalized_validation_dataset
+)
 
-    #save residual
-    res_file.write("%f\n" % res)
+# Extract a batch of images from the validation dataset
+for batch in normalized_validation_dataset.take(1):
+    original_images = batch[0]
 
-    #**********save image as png**********
-    max_pixel = np.amax(f)
-    img = (f/max_pixel) * 255
-    img = np.round(img)
+# Reconstruct the images
+reconstructed_images = autoencoder.predict(original_images)
 
-    plt.figure(1)
-    plt.style.use('grayscale')
-    plt.imshow(img.T) #transpose image
-    plt.axis('off')
-    png_outname = (outname + '.png')
-    plt.savefig(png_outname)
-    plt.close()
+# Save the original and reconstructed images
+for i in range(len(original_images)):
+    original_img = (original_images[i].numpy() * 255).astype(np.uint8)
+    reconstructed_img = (reconstructed_images[i] * 255).astype(np.uint8)
+
+    original_img_pil = Image.fromarray(original_img)
+    reconstructed_img_pil = Image.fromarray(reconstructed_img)
+
+    original_img_pil.save(os.path.join(output_dir_original, f'original_{i}.png'))
+    reconstructed_img_pil.save(os.path.join(output_dir_reconstructed, f'reconstructed_{i}.png'))
+
+print(f"Saved original images to {output_dir_original}")
+print(f"Saved reconstructed images to {output_dir_reconstructed}")
+                                                                                 
+
+
