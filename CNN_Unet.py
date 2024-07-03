@@ -5,6 +5,10 @@ import numpy as np
 import os
 import shutil
 
+# Path to the directory with images
+cleandata_dir = '/home/NETID/bkphill2/data/hilo_paired_dataset/recons_highdose'
+dirtydata_dir = '/home/NETID/bkphill2/data/hilo_paired_dataset/recons_lowdose'
+
 def pair_hilo_data(clean_dir, dirty_dir, (512,512,1):
         clean_arr = sorted(os.listdir(clean_dir))
         dirty_arr = sorted(os.listdir(dirty_dir))
@@ -37,11 +41,16 @@ def clear_directory(directory):
             elif os.path.isdir(file_path):
                 shutil.rmtree(file_path)
 
-# Path to the directory with images
-cleandata_dir = '/home/NETID/bkphill2/data/hilo_paired_dataset/recons_highdose'
-dirtydata_dir = '/home/NETID/bkphill2/data/hilo_paired_dataset/recons_lowdose'
-
 clean_path, dirty_path = pair_hilo_data(clean_dir, dirty_dir)
+
+dataset = tf.data.Dataset.from_tensor_slices((dirty_paths, clean_paths))
+dataset = dataset.map(lambda x, y: tf.py_function(parse_image, [x, y], [tf.float32, tf.float32]))
+dataset = dataset.batch(32).prefetch(buffer_size=tf.data.AUTOTUNE)
+
+# Split dataset into training and validation sets
+val_size = int(len(clean_paths) * 0.2)
+train_dataset = dataset.skip(val_size)
+val_dataset = dataset.take(val_size)
 
 # Directories to save the images
 output_dir_original = 'output/original_images'
