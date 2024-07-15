@@ -141,15 +141,21 @@ predicted_images = model.predict(X_test)
 # Save original and reconstructed images for comparison
 output_dir_original = '/mmfs1/home/bkphill2/output/original_images' #Saves the originals and reconstructed images to directory (Commented in other git code)
 output_dir_reconstructed = '/mmfs1/home/bkphill2/output/reconstructed_images'
+
+def save_as_flt(data, file_path):
+    # Ensure the directory exists
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    # Open the file in write-binary (wb) mode
+    with open(file_path, 'wb') as file:
+    # Write the data as floating point data
+        file.write(data.astype(np.float32).tobytes())
+
 for i in range(len(X_test)):
-    original_img = (X_test[i] * 255).astype(np.uint8)
-    reconstructed_img = (predicted_images[i] * 255).astype(np.uint8)
+    original_img = X_test[i] * 255  # Scale if necessary, but keep as float if saving as .flt
+    reconstructed_img = predicted_images[i] * 255  # Scale if necessary, but keep as float
 
-    original_img_pil = Image.fromarray(original_img)
-    reconstructed_img_pil = Image.fromarray(reconstructed_img)
-
-    original_img_pil.save(os.path.join(output_dir_original, f'original_{i}.flt'))
-    reconstructed_img_pil.save(os.path.join(output_dir_reconstructed, f'reconstructed_{i}.flt'))
+    save_as_flt(original_img, os.path.join(output_dir_original, f'original_{i}.flt'))
+    save_as_flt(reconstructed_img, os.path.join(output_dir_reconstructed, f'reconstructed_{i}.flt'))
 
 print(f"Saved original images to {output_dir_original}")
 print(f"Saved reconstructed images to {output_dir_reconstructed}")
